@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "videos": [
+    {
+      "id": "video1",
+      "title": "How I Would Learn Digital Marketing (If I Could Start Over)",
+      "examples": [
+        {
+          "timestamp": 43.0,
+          "label": "overlay_sfx_emphasis",
+          "outcome": "positive",
+          "elements": [
+            {
+              "type": "text_overlay",
+              "layer": "overlay",
+              "style": "highlighted_background",
+              "content": "Choose One Area",
+              "animation": "fade_in",
+              "context": "Introducing focused strategy"
+            },
+            {
+              "type": "sound_effect",
+              "layer": "audio",
+              "sound": "ui_pop",
+              "context": "Accent new idea"
+            }
+          ],
+          "rationale": "Pairs new strategic directive with audible cue to improve recall."
+        },
+        {
+          "timestamp": 324.0,
+          "label": "progressive_checklist",
+          "outcome": "positive",
+          "elements": [
+            {
+              "type": "text_overlay",
+              "layer": "overlay",
+              "style": "highlighted_background",
+              "content": {
+                "title": "Practice Playbook",
+                "items": [
+                  "Cut new content",
+                  "Prioritise progress",
+                  "Work with mentors"
+                ]
+              },
+              "animation": "fade_in_list",
+              "context": "Checklist builds across timestamps"
+            }
+          ],
+          "rationale": "Demonstrates additive list building without resetting viewer context."
+        },
+        {
+          "timestamp": 327.0,
+          "label": "overlay_collision",
+          "outcome": "negative",
+          "elements": [
+            {
+              "type": "text_overlay",
+              "layer": "overlay",
+              "style": "bold_emphasis",
+              "content": "Cut the Noise"
+            },
+            {
+              "type": "text_overlay",
+              "layer": "overlay",
+              "style": "highlighted_background",
+              "content": "Prioritise Progress"
+            }
+          ],
+          "violation": "Multiple overlay elements competing for same screen space.",
+          "remedy": "Stagger timestamps by 0.3s or merge copy into a single list entry."
+        }
+      ]
+    },
+    {
+      "id": "video2",
+      "title": "Digital Marketing 101 (A Beginner's Guide to Marketing)",
+      "examples": [
+        {
+          "timestamp": 39.0,
+          "label": "topic_transition",
+          "outcome": "positive",
+          "elements": [
+            {
+              "type": "text_overlay",
+              "layer": "overlay",
+              "style": "highlighted_background",
+              "content": "Digital vs Traditional",
+              "animation": "fade_in",
+              "context": "Introduce comparison topic"
+            },
+            {
+              "type": "sound_effect",
+              "layer": "audio",
+              "sound": "whoosh_standard"
+            },
+            {
+              "type": "effect",
+              "layer": "transition",
+              "action": "zoom_in",
+              "duration": 1.0
+            }
+          ],
+          "rationale": "Combines visual, auditory, and motion cues to signal chapter shift."
+        },
+        {
+          "timestamp": 915.0,
+          "label": "organic_vs_paid_split",
+          "outcome": "positive",
+          "elements": [
+            {
+              "type": "text_overlay",
+              "layer": "overlay",
+              "style": "split_column",
+              "content": {
+                "left": "Organic",
+                "right": "Paid"
+              },
+              "animation": "fade_in_list",
+              "context": "Contrast acquisition modes"
+            }
+          ],
+          "rationale": "Split layout mirrors spoken comparison, improving comprehension."
+        },
+        {
+          "timestamp": 875.0,
+          "label": "excessive_zoom_chain",
+          "outcome": "negative",
+          "elements": [
+            {
+              "type": "effect",
+              "layer": "transition",
+              "action": "zoom_in",
+              "duration": 0.7
+            },
+            {
+              "type": "effect",
+              "layer": "transition",
+              "action": "zoom_in",
+              "duration": 0.6
+            },
+            {
+              "type": "effect",
+              "layer": "transition",
+              "action": "zoom_in",
+              "duration": 0.6
+            }
+          ],
+          "violation": "Repeated zoom effects within a 5-second span without narrative escalation.",
+          "remedy": "Alternate with `zoom_out` or `fade`, and reserve zoom for pivotal statements."
+        }
+      ]
+    }
+  ]
+}
