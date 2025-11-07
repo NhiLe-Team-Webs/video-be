@@ -44,7 +44,6 @@ def run_auto_editor(
         "libx264",
         "--audio-codec",
         "aac",
-        "--quiet",
     ]
     run_command(command, logger=LOGGER)
     metadata = {
