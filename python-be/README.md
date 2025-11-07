@@ -1,8 +1,8 @@
 # Python Backend Toolkit
 
-Automation scripts for preparing video transcripts, scene analysis, AI-generated plans, and Remotion-ready assets.
+Local-first automation scripts that ingest raw footage, trim silence, generate Whisper transcripts, build an AI-assisted scene plan, and export artifacts ready for FE tooling.
 
-## Quick Start
+## Quick start
 
 ```bash
 cd python-be
@@ -12,22 +12,20 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Optional `.env` overrides:
+### Runtime directories
 
-```dotenv
-# Silence thresholds (milliseconds) that gate transition placement
-TRANSITIONS_MIN_PAUSE_MS=700
-MIN_PAUSE_MS=700
+The pipeline writes everything under `python-be/data/` and copies the final artifacts to `python-be/outputs/<slug>/`.
 
-# Default transition fallback (cut | fadeCamera | slideWhoosh)
-DEFAULT_TRANSITION_TYPE=fadeCamera
-
-# Gemini configuration (if using LLM planning)
-GEMINI_API_KEY=...
-GEMINI_MODEL=gemini-1.5-pro
+```
+data/
+ ├─ input/         # ingested footage per slug
+ ├─ processed/     # auto-editor output
+ ├─ transcripts/   # Whisper JSON + TXT
+ ├─ plans/         # plan_<slug>.json
+ └─ logs/          # module + metadata logs
 ```
 
-## End-to-End Workflow
+## Run the full flow
 
 ```bash
 # macOS/Linux
@@ -37,72 +35,89 @@ GEMINI_MODEL=gemini-1.5-pro
 run_all.bat path\to\video.mp4
 ```
 
-The script:
+Environment overrides:
 
-1. Syncs the knowledge base (`data_processing/sync_knowledge_base.py`).
-2. Trims silence via Auto-Editor (`outputs/stage1_cut.mp4`).
-3. Generates an SRT transcript with Whisper (`outputs/stage1_cut.srt`).
-4. Builds a scene map (`outputs/scene_map.json`) and training windows (`outputs/training_windows.json`).
-5. Calls the Gemini planner (`outputs/plan.json`).
-6. Enriches the plan with motion/B-roll metadata (`outputs/plan_enriched.json`).
-7. Copies the trimmed video and enriched plan to `../public/input/`.
+| Variable | Meaning | Example |
+| -------- | ------- | ------- |
+| `PIPELINE_SLUG` | Force a slug (else timestamp) | `PIPELINE_SLUG=ke-ai-demo` |
+| `PLAN_MODEL` | Gemini model override passed to `make_plan.py` | `PLAN_MODEL=gemini-1.5-pro` |
+| `PLAN_MAX_ENTRIES` | Cap SRT rows sent to Gemini | `PLAN_MAX_ENTRIES=140` |
+| `PLAN_EXTRA` | Extra prompt instructions | `PLAN_EXTRA="ưu tiên hook đầu video"` |
+| `PLAN_SCENE_MAP` | Path to `scene_map.json` (optional) | `PLAN_SCENE_MAP=data/plans/scene_map.json` |
+| `PLAN_DRY_RUN` | `1/true` to only print the prompt | `PLAN_DRY_RUN=1` |
+| `WHISPER_MODEL` | Whisper model size | `WHISPER_MODEL=base` |
+| `WHISPER_LANGUAGE` | Optional ISO language hint | `WHISPER_LANGUAGE=vi` |
+| `VENV_PYTHON` | Explicit Python binary for scripts | `VENV_PYTHON=.venv\Scripts\python.exe` |
 
-## Key Scripts
+> 💡 Set `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`) in your environment or `.env` before running the planner.
 
-| Script | Description |
-| ------ | ----------- |
-| `data_processing/generate_scene_map.py` | Derives topics, highlight scores, and CTA flags from the transcript. |
-| `data_processing/sync_knowledge_base.py` | Parses Markdown/JSON docs into structured data and embeddings. |
-| `data_processing/prepare_training_windows.py` | Converts SRT entries into training samples enriched with knowledge snippets. |
-| `plan_generation/make_plan_gemini.py` | Prompts Gemini using transcript + scene map + knowledge snippets. |
-| `plan_generation/enrich_plan.py` | Adds B-roll, motion cues, and CTA safeguards to the generated plan. |
-| `plan_generation/validators/` | Schema and rule validations for any plan before export. |
+`run_all` executes `python -m app.orchestrator ...`, which performs:
 
-## Generated Artifacts
+1. **Ingest** – copies the footage into `data/input/<slug>.mp4`.
+2. **Auto-Editor** – trims silence and stores the cut clip in `data/processed/<slug>_ae.mp4`.
+3. **Whisper** – writes JSON, TXT, and SRT transcripts in `data/transcripts/`.
+4. **Planner** – shells out to `plan_generation/make_plan.py` (Gemini) to create `data/plans/<slug>.json`.
+5. **Exporter** – copies the processed video + transcript + plan into `outputs/<slug>/` along with a `manifest.json`.
 
-| Path | Purpose |
-| ---- | ------- |
-| `outputs/stage1_cut.mp4` | Silence-trimmed video (source for Remotion). |
-| `outputs/stage1_cut.srt` | Transcript produced by Whisper. |
-| `outputs/scene_map.json` | Per-segment analysis (topics, scores, CTA marks). |
-| `outputs/training_windows.json` | AI training samples aligned to the transcript. |
-| `outputs/plan.json` | Raw Gemini output. |
-| `outputs/plan_enriched.json` | Finalised plan with motion/B-roll metadata. |
-| `outputs/knowledge/` | Cached structured docs and embeddings. |
+## Run modules individually
 
-## Knowledge Base Integration
-
-- Curated content lives in `../knowledge-base/` (see that README for structure).
-- Python utilities in `knowledge_base/` provide ingestion, vector search, and validation helpers.
-- `make_plan_gemini.py` automatically retrieves relevant guideline snippets once the cache is synced.
-- Use `KnowledgeService.validate_plan(plan_dict)` to combine schema and rule checks before shipping a plan.
-
-## Remotion Rendering
+Each module is a CLI so you can rerun specific steps:
 
 ```bash
-cd ../remotion-app
-npm install
-npm run render   # outputs out/final.mp4
+python -m app.ingest --source footage.mp4 --slug demo-slug
+python -m app.auto_editor_runner --slug demo-slug
+python -m app.transcriber --slug demo-slug --model small --language en
+python -m app.planner_llm --slug demo-slug --model gemini-1.5-pro
+python -m app.exporter --slug demo-slug
 ```
 
-The Remotion project expects `public/input/input.mp4` and `public/input/plan.json` (copied by the run script). Segment transitions, highlights, SFX, and B-roll placeholders are all driven by the enriched plan.
+## LLM planner
+
+- Planning is delegated to `plan_generation/make_plan.py`, which already contains the Gemini prompt, fallback configs, and KnowledgeService glue.
+- Set `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`) in `.env` or the environment so `google-generativeai` can authenticate.
+- Reuse the module directly:
+
+```bash
+python -m app.planner_llm --slug demo-slug --model gemini-1.5-pro
+```
+
+- Planner output schema:
+
+```jsonc
+{
+  "project_slug": "demo-slug",
+  "created_at": "2025-11-07T12:00:00Z",
+  "generator": {"provider": "gemini", "model": "gemini-1.5-pro"},
+  "video": {"processed_video": "data/processed/demo-slug_ae.mp4"},
+  "scenes": [
+    {
+      "scene_id": "scene-001",
+      "start": 0.0,
+      "end": 18.4,
+      "summary": "...",
+      "transcript_excerpt": "..."
+    }
+  ]
+}
+```
+
+## Generated artifacts
+
+| Path | Description |
+| ---- | ----------- |
+| `data/input/<slug>.mp4` | Ingested copy of the source footage. |
+| `data/processed/<slug>_ae.mp4` | Silence-trimmed clip from Auto-Editor. |
+| `data/transcripts/<slug>.json` | Raw Whisper JSON (segments + timing). |
+| `data/transcripts/<slug>.txt` | Plain-text transcript for prompts. |
+| `data/transcripts/<slug>.srt` | Subtitle file consumed by `make_plan.py`. |
+| `data/plans/<slug>.json` | Scene plan consumed by FE. |
+| `outputs/<slug>/manifest.json` | Export summary + relative paths. |
 
 ## Troubleshooting
 
-- **Missing Whisper output**: ensure `pip install -r requirements.txt` completed and you have the necessary FFmpeg codecs.
-- **Gemini errors**: confirm `GEMINI_API_KEY` is set; use `--dry-run --print-prompt` to inspect the constructed prompt.
-- **Validation failures**: run the validators manually to inspect issues.
-  ```python
-  from plan_generation.validators import validate_plan_schema, validate_plan_rules
-  issues = [*validate_plan_schema(plan), *validate_plan_rules(plan)]
-  ```
-- **Remotion render issues**: check that every SFX path referenced in the plan exists under `../assets/sfx/` and that the plan matches `src/data/planSchema.ts`.
+- **Auto-Editor not found** → install via `pip install auto-editor` (already in `requirements.txt`) and ensure FFmpeg is available on PATH.
+- **Whisper fails** → confirm `openai-whisper` package is installed; this implicitly depends on FFmpeg codecs.
+- **LLM errors** → confirm `GEMINI_API_KEY` is set and `plan_generation/make_plan.py` can reach the Gemini API.
+- **Permission issues** → delete stale files inside `data/` (they are ignored via `.gitignore`) if a previous run was interrupted.
 
-## Additional Documentation
-
-- `knowledge_base/README.md` – ingestion and retrieval internals.
-- `plan_generation/validators/README.md` – schema/rule validation details.
-- `outputs/knowledge/README.md` – description of cached artifacts.
-- `../knowledge-base/README.md` – curated training materials and schemas.
-
-Keep all new documentation and inline comments in English. Update the relevant README whenever you add new scripts or change the workflow to keep onboarding friction low.
+All documentation and code comments remain English-first, while `ke_hoach_local.md` tracks the Vietnamese planning notes for the local deployment.

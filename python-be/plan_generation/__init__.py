@@ -1,3 +1,2 @@
-"""
-Utilities for generating, validating, and enriching video plans.
-"""
+"""Plan generation package."""
+
