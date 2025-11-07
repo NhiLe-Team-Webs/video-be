@@ -1,2 +1,0 @@
-2025-11-07 14:19:27,530 [INFO] __main__ | === Pipeline start | slug=footage-20251107-071927 ===
-2025-11-07 14:19:32,299 [INFO] app.ingest | Ingested D:\Projects\Crownmercado\video-automation\video-be\python-be\footage.mp4 -> D:\Projects\Crownmercado\video-automation\video-be\python-be\data\input\footage-20251107-071927.mp4

@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 PYTHON_BIN="${VENV_PYTHON:-python}"
-SOURCE_VIDEO="${1:-$SCRIPT_DIR/footage.mp4}"
+SOURCE_VIDEO="${1:-$SCRIPT_DIR/data/input/footage.mp4}"
 PIPELINE_SLUG="${PIPELINE_SLUG:-}"
 WHISPER_MODEL="${WHISPER_MODEL:-small}"
 WHISPER_LANGUAGE="${WHISPER_LANGUAGE:-}"

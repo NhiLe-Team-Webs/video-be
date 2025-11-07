@@ -12,7 +12,7 @@ PLANS_DIR = DATA_DIR / "plans"
 LOGS_DIR = DATA_DIR / "logs"
 OUTPUTS_DIR = BASE_DIR / "outputs"
 
-DEFAULT_SOURCE_VIDEO = BASE_DIR / "footage.mp4"
+DEFAULT_SOURCE_VIDEO = INPUT_DIR / "footage.mp4"
 
 
 def ensure_runtime_directories() -> None:

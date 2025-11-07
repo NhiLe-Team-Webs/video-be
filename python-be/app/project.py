@@ -30,8 +30,14 @@ class ProjectPaths:
     export_dir: Path
 
     @classmethod
-    def from_slug(cls, slug: str, source_video: Path) -> "ProjectPaths":
-        ingested = INPUT_DIR / f"{slug}.mp4"
+    def from_slug(
+        cls,
+        slug: str,
+        source_video: Path,
+        *,
+        ingested_video: Path | None = None,
+    ) -> "ProjectPaths":
+        ingested = ingested_video or INPUT_DIR / f"{slug}.mp4"
         processed = PROCESSED_DIR / f"{slug}_ae.mp4"
         return cls(
             slug=slug,

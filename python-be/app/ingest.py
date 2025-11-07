@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -20,19 +19,12 @@ def ingest_video(source: Path, slug: str | None = None) -> ProjectPaths:
         raise FileNotFoundError(f"Source video not found: {source}")
 
     slug = slug or timestamp_slug(source.stem)
-    project = ProjectPaths.from_slug(slug, source_video=source)
-
-    project.ingested_video.parent.mkdir(parents=True, exist_ok=True)
-    if source.resolve() != project.ingested_video.resolve():
-        shutil.copy2(source, project.ingested_video)
-    else:
-        LOGGER.info("Source already located at %s, skipping copy.", project.ingested_video)
-
+    project = ProjectPaths.from_slug(slug, source_video=source, ingested_video=source)
     metadata = {
         "slug": project.slug,
         "source": str(source),
         "ingested_video": str(project.ingested_video),
-        "copied_at": datetime.utcnow().isoformat() + "Z",
+        "registered_at": datetime.utcnow().isoformat() + "Z",
         "size_bytes": project.ingested_video.stat().st_size,
     }
     dump_json(metadata, project.metadata_file)

@@ -12,7 +12,7 @@ if not "%VENV_PYTHON%"=="" (
 
 set "SOURCE_VIDEO=%~1"
 if "%SOURCE_VIDEO%"=="" (
-  set "SOURCE_VIDEO=%SCRIPT_DIR%footage.mp4"
+  set "SOURCE_VIDEO=%SCRIPT_DIR%data\input\footage.mp4"
 )
 
 set "PIPELINE_SLUG=%PIPELINE_SLUG%"

@@ -6,7 +6,7 @@
 - Thiết kế theo hướng “scale-ready”: khi cần có thể tách thành API/service và giao tiếp với `video-fe`, nhưng toàn bộ logic hiện nằm ở `video-be`.
 
 ### 2. Luồng tổng quát
-1. **Nhập liệu video**: người dùng copy video vào một thư mục “inbox” cố định (ví dụ `data/input`); `run_all.bat` chỉ nhận đường dẫn này.
+1. **Nhập liệu video**: người dùng đặt trực tiếp file nguồn vào thư mục “inbox” (`python-be/data/input/footage.mp4` mặc định hoặc `data/input/<slug>.mp4` nếu tự đặt tên); `run_all.bat` đọc thẳng từ đây.
 2. **TIỀN XỬ LÝ – Auto-Editor**  
    - Script BE gọi `auto-editor` để cắt bỏ khoảng trống.  
    - Quy ước tên file output (ví dụ `data/processed/<slug>_ae.mp4`) để những bước sau dễ tham chiếu.  
@@ -42,7 +42,7 @@ video-be/
 ### 4. Chi tiết từng module BE
 | Module | Mô tả | Công nghệ/Ghi chú |
 |--------|-------|-------------------|
-| `ingest` | Kiểm tra file mới trong `data/input`, tạo slug/project id, validate định dạng | Python script + watchdog (nếu cần realtime) |
+| `ingest` | Kiểm tra file nguồn, tạo slug/project id, validate định dạng | Python script + watchdog (nếu cần realtime) |
 | `auto_editor_runner` | Gọi `auto-editor` CLI thông qua subprocess; parse log để lấy timestamps cắt | Cần config tham số (min clip length, silence threshold) |
 | `transcriber` | Gọi Whisper (CLI/Python) -> trả transcript + segments (start/end/sec + text) | Ưu tiên model nhỏ (base/small) cho local |
 | `planner_llm` | Wrapper gọi `plan_generation/make_plan.py` (Gemini) dựa trên SRT đã tạo | Cần `GEMINI_API_KEY`, hỗ trợ `--plan-*` args |

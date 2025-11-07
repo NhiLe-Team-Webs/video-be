@@ -35,6 +35,8 @@ data/
 run_all.bat path\to\video.mp4
 ```
 
+> Nếu không truyền tham số, script mặc định đọc `python-be/data/input/footage.mp4`. Chỉ cần thả video vào đó và chạy `run_all.bat`.
+
 Environment overrides:
 
 | Variable | Meaning | Example |
@@ -53,7 +55,7 @@ Environment overrides:
 
 `run_all` executes `python -m app.orchestrator ...`, which performs:
 
-1. **Ingest** – copies the footage into `data/input/<slug>.mp4`.
+1. **Ingest** – registers the provided footage path (default `data/input/footage.mp4`) and derives a slug.
 2. **Auto-Editor** – trims silence and stores the cut clip in `data/processed/<slug>_ae.mp4`.
 3. **Whisper** – writes JSON, TXT, and SRT transcripts in `data/transcripts/`.
 4. **Planner** – shells out to `plan_generation/make_plan.py` (Gemini) to create `data/plans/<slug>.json`.
@@ -64,7 +66,7 @@ Environment overrides:
 Each module is a CLI so you can rerun specific steps:
 
 ```bash
-python -m app.ingest --source footage.mp4 --slug demo-slug
+python -m app.ingest --source data/input/demo-slug.mp4 --slug demo-slug
 python -m app.auto_editor_runner --slug demo-slug
 python -m app.transcriber --slug demo-slug --model small --language en
 python -m app.planner_llm --slug demo-slug --model gemini-1.5-pro
@@ -105,7 +107,7 @@ python -m app.planner_llm --slug demo-slug --model gemini-1.5-pro
 
 | Path | Description |
 | ---- | ----------- |
-| `data/input/<slug>.mp4` | Ingested copy of the source footage. |
+| `data/input/<slug>.mp4` | User-managed footage path consumed by the pipeline. |
 | `data/processed/<slug>_ae.mp4` | Silence-trimmed clip from Auto-Editor. |
 | `data/transcripts/<slug>.json` | Raw Whisper JSON (segments + timing). |
 | `data/transcripts/<slug>.txt` | Plain-text transcript for prompts. |
