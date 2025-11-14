@@ -21,8 +21,6 @@ class ProjectPaths:
     ingested_video: Path
     processed_video: Path
     processed_metadata: Path
-    transcript_json: Path
-    transcript_text: Path
     transcript_srt: Path
     plan_json: Path
     metadata_file: Path
@@ -45,8 +43,6 @@ class ProjectPaths:
             ingested_video=ingested,
             processed_video=processed,
             processed_metadata=processed.with_suffix(".metadata.json"),
-            transcript_json=TRANSCRIPTS_DIR / f"{slug}.json",
-            transcript_text=TRANSCRIPTS_DIR / f"{slug}.txt",
             transcript_srt=TRANSCRIPTS_DIR / f"{slug}.srt",
             plan_json=PLANS_DIR / f"{slug}.json",
             metadata_file=LOGS_DIR / f"{slug}_ingest.json",

@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import shutil
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
-
 from .config import INPUT_DIR, TRANSCRIPTS_DIR, ensure_runtime_directories
 from .logging_utils import setup_logging
 from .project import ProjectPaths
-from .utils import dump_json, run_command
+from .utils import run_command
 
 LOGGER = logging.getLogger(__name__)
 
@@ -22,7 +19,7 @@ def transcribe_video(
     model: str = "small",
     language: str | None = None,
     task: str = "transcribe",
-) -> Dict[str, Any]:
+) -> Path:
     ensure_runtime_directories()
     if not project.processed_video.exists():
         raise FileNotFoundError(f"Processed video missing: {project.processed_video}")
@@ -37,7 +34,7 @@ def transcribe_video(
         "--task",
         task,
         "--output_format",
-        "all",
+        "srt",
         "--output_dir",
         str(TRANSCRIPTS_DIR),
     ]
@@ -46,26 +43,10 @@ def transcribe_video(
 
     run_command(command, logger=LOGGER, capture=False)
 
-    raw_output = TRANSCRIPTS_DIR / f"{project.processed_video.stem}.json"
-    if not raw_output.exists():
-        matches = sorted(TRANSCRIPTS_DIR.glob(f"{project.processed_video.stem}*.json"))
-        if not matches:
-            raise FileNotFoundError(
-                f"Whisper output not found for stem {project.processed_video.stem}"
-            )
-        raw_output = matches[-1]
-
-    with raw_output.open("r", encoding="utf-8") as handle:
-        transcript_data = json.load(handle)
-
-    dump_json(transcript_data, project.transcript_json)
-    text = transcript_data.get("text", "").strip()
-    project.transcript_text.write_text(text, encoding="utf-8")
-
     srt_source = _resolve_whisper_artifact(project, "srt")
     shutil.copy2(srt_source, project.transcript_srt)
-    LOGGER.info("Transcript saved to %s", project.transcript_json)
-    return transcript_data
+    LOGGER.info("Transcript saved to %s", project.transcript_srt)
+    return project.transcript_srt
 
 
 def _resolve_whisper_artifact(project: ProjectPaths, extension: str) -> Path:

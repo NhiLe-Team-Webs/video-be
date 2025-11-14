@@ -20,7 +20,6 @@ def export_artifacts(project: ProjectPaths) -> Path:
         "slug": project.slug,
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "processed_video": None,
-        "transcript_text": None,
         "transcript_srt": None,
         "plan": None,
     }
@@ -29,11 +28,6 @@ def export_artifacts(project: ProjectPaths) -> Path:
         processed_target = project.export_dir / project.processed_video.name
         shutil.copy2(project.processed_video, processed_target)
         manifest["processed_video"] = str(processed_target)
-
-    if project.transcript_text.exists():
-        transcript_target = project.export_dir / project.transcript_text.name
-        shutil.copy2(project.transcript_text, transcript_target)
-        manifest["transcript_text"] = str(transcript_target)
 
     if project.transcript_srt.exists():
         srt_target = project.export_dir / project.transcript_srt.name

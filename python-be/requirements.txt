@@ -1,8 +1,0 @@
-auto-editor
-openai-whisper
-openai
-pydub
-google-generativeai
-python-dotenv
-sentence-transformers
-numpy
