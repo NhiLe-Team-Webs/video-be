@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 from . import auto_editor_runner, exporter, ingest, planner_llm, transcriber
-from .config import DEFAULT_SOURCE_VIDEO, ensure_runtime_directories
+from .config import CLIENT_MANIFEST_PATH, DEFAULT_SOURCE_VIDEO, ensure_runtime_directories
 from .logging_utils import setup_logging
 from .project import ProjectPaths
 from .utils import slugify, timestamp_slug
@@ -21,6 +21,7 @@ def run_pipeline(
     plan_max_entries: int | None = None,
     plan_extra: str | None = None,
     plan_scene_map: Path | None = None,
+    plan_client_manifest: Path | None = None,
     plan_dry_run: bool = False,
     whisper_model: str = "small",
     whisper_language: str | None = None,
@@ -47,6 +48,7 @@ def run_pipeline(
         max_entries=plan_max_entries,
         extra_instructions=plan_extra,
         scene_map=plan_scene_map,
+        client_manifest=plan_client_manifest or CLIENT_MANIFEST_PATH,
         dry_run=plan_dry_run,
     )
     exporter.export_artifacts(ingest_project)
@@ -82,6 +84,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Optional path to scene_map.json.",
     )
     parser.add_argument(
+        "--plan-client-manifest",
+        type=Path,
+        help="Path to clientManifest.json for plan generation.",
+    )
+    parser.add_argument(
         "--plan-dry-run",
         action="store_true",
         help="Only print the prompt (no Gemini call).",
@@ -100,6 +107,7 @@ def main() -> None:
         plan_max_entries=args.plan_max_entries,
         plan_extra=args.plan_extra,
         plan_scene_map=args.plan_scene_map,
+        plan_client_manifest=args.plan_client_manifest,
         plan_dry_run=args.plan_dry_run,
         whisper_model=args.whisper_model,
         whisper_language=args.whisper_language,

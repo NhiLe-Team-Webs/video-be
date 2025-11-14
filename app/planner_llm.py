@@ -5,7 +5,7 @@ import logging
 import sys
 from pathlib import Path
 
-from .config import INPUT_DIR
+from .config import CLIENT_MANIFEST_PATH, INPUT_DIR
 from .logging_utils import setup_logging
 from .project import ProjectPaths
 from .utils import run_command
@@ -21,6 +21,7 @@ def generate_plan(
     max_entries: int | None = None,
     extra_instructions: str | None = None,
     scene_map: Path | None = None,
+    client_manifest: Path | None = None,
     dry_run: bool = False,
 ) -> Path:
     if not project.transcript_srt.exists():
@@ -41,6 +42,8 @@ def generate_plan(
         command.extend(["--extra", extra_instructions])
     if scene_map:
         command.extend(["--scene-map", str(scene_map)])
+    if client_manifest:
+        command.extend(["--client-manifest", str(client_manifest)])
     if dry_run:
         command.append("--dry-run")
 
@@ -61,6 +64,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Optional path to scene_map.json to enrich the prompt.",
     )
     parser.add_argument(
+        "--client-manifest",
+        type=Path,
+        help="Path to clientManifest.json with frontend resources.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print the prompt without calling Gemini.",
@@ -79,6 +87,7 @@ def main() -> None:
         max_entries=args.max_entries,
         extra_instructions=args.extra,
         scene_map=args.scene_map,
+        client_manifest=args.client_manifest or CLIENT_MANIFEST_PATH,
         dry_run=args.dry_run,
     )
 
