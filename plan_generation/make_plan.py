@@ -802,6 +802,7 @@ def build_prompt(
     broll_catalog: Dict[str, Any] | None = None,
     sfx_catalog: Dict[str, Any] | None = None,
     motion_rules: Dict[str, Any] | None = None,
+    client_manifest: Dict[str, Any] | None = None,
     knowledge_service: Optional["KnowledgeService"] = None,
 ) -> str:
     """
@@ -815,6 +816,7 @@ def build_prompt(
         broll_catalog: Optional. Dictionary containing B-roll asset catalog.
         sfx_catalog: Optional. Dictionary containing SFX asset catalog.
         motion_rules: Optional. Dictionary containing motion cue rules.
+        client_manifest: Optional. Dictionary containing frontend templates/effects.
 
     Returns:
         A formatted string representing the complete prompt for the LLM.
@@ -914,6 +916,10 @@ def build_prompt(
         rules_lines.append("- Use the scene map insights below to align B-roll, CTA moments, motion cues, and SFX hints per segment.")
     if broll_catalog:
         rules_lines.append("- Choose B-roll IDs from the catalog context, matching topics/mood and keeping framing consistent.")
+    if client_manifest:
+        rules_lines.append(
+            "- Align segments with the FE templates and effects listed in the client manifest when recommending overlays, typography, or decorative assets."
+        )
 
     # Build supplemental context sections
     context_sections: List[str] = []
@@ -933,6 +939,29 @@ def build_prompt(
         sfx_summary = summarize_sfx_catalog(sfx_catalog)
         if sfx_summary:
             context_sections.append("SFX catalog overview:\n" + sfx_summary)
+    if client_manifest:
+        templates = client_manifest.get("templates", [])[:5]
+        effects = client_manifest.get("effects", {})
+        audio = client_manifest.get("audio", {})
+        audio_lines: List[str] = []
+        if audio.get("bgm"):
+            audio_lines.append(f"BGM preference: {audio['bgm']}")
+        if audio.get("sfxFallback"):
+            audio_lines.append(f"SFX fallback: {audio['sfxFallback']}")
+        if templates:
+            template_lines = []
+            for template in templates:
+                template_lines.append(
+                    f"{template.get('id','?')}: {template.get('name','')} - {template.get('description','')}"
+                )
+            context_sections.append(
+                "FE templates (id / name / description):\n" + "\n".join(template_lines)
+            )
+        if effects:
+            effect_keys = ", ".join(list(effects.keys())[:12])
+            context_sections.append("Available FE effects keys:\n" + effect_keys)
+        if audio_lines:
+            context_sections.append("Audio guidance from client manifest:\n" + "\n".join(audio_lines))
 
     # Assemble all parts of the prompt
     prompt_parts = [
@@ -1843,6 +1872,12 @@ def main(argv: List[str] | None = None) -> int:
         type=Path,
         help="Optional scene_map.json to enrich the prompt with precomputed metadata",
     )
+    parser.add_argument(
+        "--client-manifest",
+        dest="client_manifest_path",
+        type=Path,
+        help="Optional clientManifest.json with frontend templates and effects",
+    )
 
     args = parser.parse_args(argv)
 
@@ -1864,6 +1899,19 @@ def main(argv: List[str] | None = None) -> int:
         if not scene_map_data:
             print(f"[WARN] Scene map is empty or invalid: {args.scene_map_path}", file=sys.stderr)
             scene_map_data = None
+
+    # Load optional client manifest data
+    client_manifest: Dict[str, Any] | None = None
+    if args.client_manifest_path:
+        if not args.client_manifest_path.exists():
+            parser.error(f"Client manifest not found: {args.client_manifest_path}")
+        client_manifest = load_json_if_exists(args.client_manifest_path)
+        if not client_manifest:
+            print(
+                f"[WARN] Client manifest is empty or invalid: {args.client_manifest_path}",
+                file=sys.stderr,
+            )
+            client_manifest = None
 
     # Resolve repository root and load asset catalogs/motion rules
     repo_root = resolve_repo_root()
@@ -1893,6 +1941,7 @@ def main(argv: List[str] | None = None) -> int:
         broll_catalog=broll_catalog if base_include_catalogs else None,
         sfx_catalog=sfx_catalog if base_include_catalogs else None,
         motion_rules=motion_rules if base_include_catalogs else None,
+        client_manifest=client_manifest,
         knowledge_service=knowledge_service,
     )
 
@@ -1957,6 +2006,7 @@ def main(argv: List[str] | None = None) -> int:
                 broll_catalog=broll_catalog if include_catalogs_flag else None,
                 sfx_catalog=sfx_catalog if include_catalogs_flag else None,
                 motion_rules=motion_rules if include_catalogs_flag else None,
+                client_manifest=client_manifest,
                 knowledge_service=knowledge_service,
             )
         attempt_prompt = prompt_cache[cache_key]

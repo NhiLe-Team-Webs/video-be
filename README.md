@@ -25,6 +25,8 @@ data/
  └─ logs/          # module + metadata logs
 ```
 
+> ⚠️ **Ignored paths.** `video-be/.gitignore` intentionally excludes the entire `data/` tree along with `*.mp4`, `*.json`, `*.srt`, and `*.log`, so these directories are empty right after cloning. Either create them manually (e.g., `mkdir -p data/input data/processed data/transcripts data/plans`) or drop a source video into `data/input` and run `run_all.*`; the pipeline recreates every folder and writes the downstream artifacts automatically. Keep a `.env` file (copy `.env.example` if needed) so the scripts can read API keys.
+
 ## Run the full flow
 
 ```bash

@@ -6,6 +6,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
 INPUT_DIR = DATA_DIR / "input"
+CLIENT_MANIFEST_PATH = INPUT_DIR / "clientManifest.json"
 PROCESSED_DIR = DATA_DIR / "processed"
 TRANSCRIPTS_DIR = DATA_DIR / "transcripts"
 PLANS_DIR = DATA_DIR / "plans"
