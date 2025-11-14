@@ -44,7 +44,7 @@ def transcribe_video(
     if language:
         command.extend(["--language", language])
 
-    run_command(command, logger=LOGGER)
+    run_command(command, logger=LOGGER, capture=False)
 
     raw_output = TRANSCRIPTS_DIR / f"{project.processed_video.stem}.json"
     if not raw_output.exists():

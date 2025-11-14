@@ -70,9 +70,9 @@ def run_command(
         if completed.stderr:
             log.debug("[stderr]\n%s", completed.stderr.strip())
     if completed.returncode != 0:
-        raise RuntimeError(
-            f"Command failed ({completed.returncode}): {format_command(command)}"
-        )
+        error_message = f"Command failed ({completed.returncode}): {format_command(command)}"
+        log.error(error_message)
+        raise RuntimeError(error_message) from None
     return completed
 
 

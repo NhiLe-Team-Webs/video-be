@@ -34,11 +34,13 @@ def run_pipeline(
     LOGGER.info("=== Pipeline start | slug=%s ===", project.slug)
     ingest_project = ingest.ingest_video(source, slug=project.slug)
     auto_editor_runner.run_auto_editor(ingest_project)
+    LOGGER.info("=== Starting transcription ===")
     transcriber.transcribe_video(
         ingest_project,
         model=whisper_model,
         language=whisper_language,
     )
+    LOGGER.info("=== Transcription completed ===")
     planner_llm.generate_plan(
         ingest_project,
         model=plan_model,

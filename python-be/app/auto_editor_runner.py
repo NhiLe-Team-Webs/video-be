@@ -16,7 +16,7 @@ LOGGER = logging.getLogger(__name__)
 def run_auto_editor(
     project: ProjectPaths,
     *,
-    silence_threshold: float = 0.06,
+    silence_threshold: float = 0.12,
     margin: str = "0.75s,1s",
     silent_speed: float = 4.0,
     video_speed: float = 1.0,
@@ -45,7 +45,7 @@ def run_auto_editor(
         "--audio-codec",
         "aac",
     ]
-    run_command(command, logger=LOGGER)
+    run_command(command, logger=LOGGER, capture=False)
     metadata = {
         "slug": project.slug,
         "input": str(project.ingested_video),
