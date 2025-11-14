@@ -16,9 +16,9 @@ LOGGER = logging.getLogger(__name__)
 def run_auto_editor(
     project: ProjectPaths,
     *,
-    silence_threshold: float = 0.12,
-    margin: str = "0.75s,1s",
-    silent_speed: float = 4.0,
+    silence_threshold: float = 0.06,
+    margin: str = "0.2s,0.4s",
+    silent_speed: float = 1.5,
     video_speed: float = 1.0,
 ) -> Path:
     ensure_runtime_directories()
@@ -64,8 +64,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run Auto-Editor for a project slug.")
     parser.add_argument("--slug", required=True, help="Project slug to process.")
     parser.add_argument("--silence-threshold", type=float, default=0.06)
-    parser.add_argument("--margin", default="0.75s,1s")
-    parser.add_argument("--silent-speed", type=float, default=4.0)
+    parser.add_argument("--margin", default="0.2s,0.4s")
+    parser.add_argument("--silent-speed", type=float, default=1.5)
     parser.add_argument("--video-speed", type=float, default=1.0)
     return parser
 
