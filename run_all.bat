@@ -15,11 +15,17 @@ if "%SOURCE_VIDEO%"=="" (
   set "SOURCE_VIDEO=%SCRIPT_DIR%data\input\footage.mp4"
 )
 
-set "PIPELINE_SLUG=%PIPELINE_SLUG%"
-if "%PIPELINE_SLUG%"=="" (
+set "SLUG_OVERRIDE=%~2"
+if "%SLUG_OVERRIDE%"=="" (
+  set "SLUG_TARGET=%PIPELINE_SLUG%"
+) else (
+  set "SLUG_TARGET=%SLUG_OVERRIDE%"
+)
+
+if "%SLUG_TARGET%"=="" (
   set "SLUG_ARG="
 ) else (
-  set "SLUG_ARG=--slug %PIPELINE_SLUG%"
+  set "SLUG_ARG=--slug %SLUG_TARGET%"
 )
 
 set "PLAN_MODEL_ARG="
@@ -58,8 +64,8 @@ if not "%WHISPER_LANGUAGE%"=="" (
 
 echo [INFO] Starting local pipeline
 echo        Source     : %SOURCE_VIDEO%
-if not "%PIPELINE_SLUG%"=="" (
-  echo        Slug override: %PIPELINE_SLUG%
+if not "%SLUG_TARGET%"=="" (
+  echo        Slug override: %SLUG_TARGET%
 )
 
 %PYTHON% -m app.orchestrator --source "%SOURCE_VIDEO%" %SLUG_ARG% %PLAN_MODEL_ARG% %PLAN_MAX_ARG% %PLAN_EXTRA_ARG% %PLAN_SCENE_MAP_ARG% %PLAN_DRY_RUN_ARG% %WHISPER_MODEL_ARG% %WHISPER_LANG_ARG%
