@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sys
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -14,7 +15,7 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 
 try:
-    from .knowledge import KnowledgeService
+    from .knowledge import KnowledgeService  # type: ignore[import]
 except Exception:  # pragma: no cover - optional dependency at runtime
     KnowledgeService = None  # type: ignore[assignment]
 
@@ -27,182 +28,6 @@ MAX_SCENE_CONTEXT_ITEMS = 32
 MAX_BROLL_SUMMARY_ITEMS = 20
 MAX_SFX_ITEMS_PER_CATEGORY = 5
 
-HIGHLIGHT_STOPWORDS = {
-    "a",
-    "an",
-    "the",
-    "and",
-    "or",
-    "but",
-    "so",
-    "yet",
-    "nor",
-    "to",
-    "of",
-    "in",
-    "on",
-    "at",
-    "by",
-    "for",
-    "from",
-    "with",
-    "without",
-    "into",
-    "onto",
-    "about",
-    "around",
-    "over",
-    "under",
-    "after",
-    "before",
-    "between",
-    "among",
-    "through",
-    "during",
-    "within",
-    "across",
-    "against",
-    "toward",
-    "towards",
-    "upon",
-    "via",
-    "this",
-    "that",
-    "these",
-    "those",
-    "there",
-    "here",
-    "then",
-    "than",
-    "when",
-    "where",
-    "while",
-    "because",
-    "since",
-    "if",
-    "though",
-    "although",
-    "unless",
-    "until",
-    "very",
-    "really",
-    "just",
-    "maybe",
-    "perhaps",
-    "quite",
-    "rather",
-    "some",
-    "any",
-    "each",
-    "every",
-    "either",
-    "neither",
-    "both",
-    "many",
-    "much",
-    "few",
-    "little",
-    "more",
-    "most",
-    "less",
-    "least",
-    "own",
-    "same",
-    "such",
-    "i",
-    "me",
-    "my",
-    "mine",
-    "myself",
-    "we",
-    "us",
-    "our",
-    "ours",
-    "ourselves",
-    "you",
-    "your",
-    "yours",
-    "yourself",
-    "yourselves",
-    "he",
-    "him",
-    "his",
-    "himself",
-    "she",
-    "her",
-    "hers",
-    "herself",
-    "it",
-    "its",
-    "itself",
-    "they",
-    "them",
-    "their",
-    "theirs",
-    "themselves",
-    "who",
-    "whom",
-    "whose",
-    "which",
-    "what",
-    "whatever",
-    "whoever",
-    "whichever",
-    "someone",
-    "something",
-    "anyone",
-    "anything",
-    "everyone",
-    "everything",
-    "not",
-    "no",
-    "yes",
-    "ok",
-    "okay",
-    "uh",
-    "um",
-    "hmm",
-    "ve",
-    "re",
-    "ll",
-    "d",
-    "s",
-    "m",
-}
-
-_ALLOWED_CONNECTORS = {"of", "for", "and", "&", "in", "on", "vs", "versus", "to", "with"}
-_COMMON_VERB_TOKENS = {
-    "be",
-    "am",
-    "is",
-    "are",
-    "was",
-    "were",
-    "being",
-    "been",
-    "do",
-    "does",
-    "did",
-    "doing",
-    "have",
-    "has",
-    "had",
-    "having",
-    "will",
-    "would",
-    "shall",
-    "should",
-    "can",
-    "could",
-    "may",
-    "might",
-    "must",
-    "need",
-}
-
-_TOKEN_SANITIZER = re.compile(r"\s+")
-_ALNUM_PATTERN = re.compile(r"[A-Za-z0-9]")
-_COMMON_VERB_TOKENS_LOWER = {token.lower() for token in _COMMON_VERB_TOKENS}
 SRT_HIGHLIGHT_ID_RE = re.compile(r"^srt-(\d+)$", re.IGNORECASE)
 SECTION_TITLE_SUFFIXES: tuple[str, ...] = (
     "Overview",
@@ -234,76 +59,13 @@ def format_section_title(highlight_id: str, base_phrase: str, *, fallback: str =
     return display, keyword
 
 
-def _clean_token(token: str) -> str:
-    return _TOKEN_SANITIZER.sub(" ", token.strip())
-
-
-def _trim_edge_connectors(tokens: list[str]) -> list[str]:
-    result = list(tokens)
-    while result and result[0].lower() in _ALLOWED_CONNECTORS:
-        result.pop(0)
-    while result and result[-1].lower() in _ALLOWED_CONNECTORS:
-        result.pop()
-    return result
-
-
-def _filter_tokens_to_noun_phrase(tokens: list[str]) -> list[str]:
-    selected: list[str] = []
-    total = len(tokens)
-
-    def _has_future_content(start: int) -> bool:
-        for future_idx in range(start, total):
-            candidate = tokens[future_idx].strip()
-            if not candidate:
-                continue
-            lower = candidate.lower()
-            if lower in _COMMON_VERB_TOKENS_LOWER:
-                continue
-            if not _ALNUM_PATTERN.search(candidate):
-                continue
-            return True
-        return False
-
-    for idx, token in enumerate(tokens):
-        normalized = _clean_token(token)
-        if not normalized:
-            continue
-        lower_token = normalized.lower()
-        if lower_token in _ALLOWED_CONNECTORS:
-            if selected and _has_future_content(idx + 1):
-                selected.append(lower_token)
-            continue
-        if lower_token in _COMMON_VERB_TOKENS_LOWER:
-            continue
-        if not _ALNUM_PATTERN.search(normalized):
-            continue
-        selected.append(normalized)
-
-    return _trim_edge_connectors(selected)
-
-
-def filter_tokens_to_noun_phrase(tokens: list[str], max_tokens: int | None = None) -> list[str]:
-    cleaned = [_clean_token(token) for token in tokens if _clean_token(token)]
-    if not cleaned:
-        return []
-
-    filtered = _filter_tokens_to_noun_phrase(cleaned)
-    if not filtered:
-        filtered = cleaned
-
-    if max_tokens is not None and max_tokens > 0:
-        limited: list[str] = []
-        content_count = 0
-        for token in filtered:
-            limited.append(token)
-            if token.lower() not in _ALLOWED_CONNECTORS:
-                content_count += 1
-            if content_count >= max_tokens:
-                break
-        filtered = _trim_edge_connectors(limited) or filtered
-
-    return filtered
-
+def sanitize_highlight_text(value: str) -> str:
+    """Trim highlight text and collapse whitespace."""
+    if not value:
+        return ""
+    cleaned = re.sub(r"[\s_\-/:]+", " ", value.strip())
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned.strip()
 
 def resolve_repo_root(start: Path | None = None) -> Path:
     """
@@ -341,58 +103,6 @@ def load_json_if_exists(path: Path | None) -> Dict[str, Any]:
     except OSError:
         print(f"[WARN] Could not read JSON file: {path}", file=sys.stderr)
     return {}
-
-
-def sanitize_highlight_text(value: str) -> str:
-    """
-    Reduce highlight text to a compact noun phrase by removing filler words and verbs.
-    Fallback to the original string if aggressive filtering would produce an empty result.
-    """
-    if not value:
-        return value
-
-    original = " ".join(value.strip().split())
-    if not original:
-        return original
-
-    tokens = re.findall(r"[A-Za-z0-9\u00C0-\u017F]+", original)
-    if not tokens:
-        return original
-
-    filtered = [token for token in tokens if token.lower() not in HIGHLIGHT_STOPWORDS]
-    candidate_tokens = filtered if filtered else tokens
-    noun_tokens = filter_tokens_to_noun_phrase(candidate_tokens, max_tokens=6)
-    if noun_tokens:
-        candidate_tokens = noun_tokens
-
-    if len(candidate_tokens) < 2 and tokens:
-        fallback_tokens = [
-            token for token in tokens if token.lower() not in {"uh", "um", "ok", "okay", "hmm"}
-        ]
-        if len(fallback_tokens) >= 2:
-            candidate_tokens = fallback_tokens[:4]
-        elif tokens:
-            candidate_tokens = tokens[:4]
-
-    phrase = " ".join(candidate_tokens).strip()
-    if not phrase:
-        phrase = original
-
-    if not phrase:
-        return value.strip()
-
-    # Keep original casing for acronyms, otherwise title-case for readability
-    if phrase.isupper():
-        return phrase
-
-    words = phrase.split()
-    normalized = " ".join(word if word.isupper() else word.capitalize() for word in words)
-    if len(normalized) <= 1:
-        return original
-    if len(normalized.split()) == 1 and len(original.split()) >= 2:
-        fallback = " ".join(token.capitalize() for token in tokens[:2])
-        return fallback or normalized
-    return normalized
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -520,6 +230,37 @@ HIGHLIGHT_ANIMATIONS = [
 HIGHLIGHT_VARIANTS = ["callout", "blurred", "brand", "cutaway", "typewriter"]
 MAX_HIGHLIGHTS = 18
 DEFAULT_HIGHLIGHT_DURATION = 2.6
+
+ALLOWED_TEXT_EFFECT_KEYS = [
+    "text.popUp3D",
+    "text.swipeHighlight",
+    "text.sequentialList",
+    "text.typeOn",
+    "text.keywordColorHighlight",
+    "text.sideFloat",
+    "text.keywordSubtitleHighlight",
+    "text.stepBreakdown",
+    "text.centralConcept",
+]
+NOTEBOX_EFFECT_ROTATION = [
+    "text.popUp3D",
+    "text.keywordSubtitleHighlight",
+    "text.keywordColorHighlight",
+    "text.swipeHighlight",
+    "text.sideFloat",
+]
+FRAMEWORK_HINTS = {"framework", "map", "matrix", "model", "system"}
+STEP_HINTS = {"step", "phase", "pillar", "stage", "hack"}
+LIST_HINTS = {"list", "stack", "playbook", "summary", "overview"}
+VS_TOKENS = (" vs ", " vs.", " versus ")
+NUMBER_PATTERN = re.compile(r"\d")
+MIN_TEXT_EFFECT_DURATION = 1.6
+MAX_TEXT_EFFECT_DURATION = 5.2
+EFFECT_BUCKET_SECONDS = 30.0
+MAX_EFFECTS_PER_BUCKET = 5
+GENERAL_EFFECT_GAP = 0.35
+TYPEON_PROTECT_GAP = 0.75
+STEP_ID_PATTERN = re.compile(r"(?:step|phase|pillar|stage|hack)[\\s_-]*\\d+", re.IGNORECASE)
 
 
 @dataclass
@@ -803,7 +544,7 @@ def build_prompt(
     sfx_catalog: Dict[str, Any] | None = None,
     motion_rules: Dict[str, Any] | None = None,
     client_manifest: Dict[str, Any] | None = None,
-    knowledge_service: Optional["KnowledgeService"] = None,
+    knowledge_service: Optional["KnowledgeService"] = None,  # type: ignore[name-defined]
 ) -> str:
     """
     Constructs the full prompt for the Gemini LLM, including transcript segments,
@@ -882,11 +623,11 @@ def build_prompt(
         "- `segments` describe consecutive portions of the trimmed video with `sourceStart` (seconds) and `duration`. Use `label` for short context if helpful.",
         f"- `transitionIn`/`transitionOut` types may be: {transition_types}; slides can add `direction` ({transition_directions}); zoom/scale/rotate/blur may include `intensity` between 0.1 and 0.35.",
         "- Trim or merge sentences when silence exceeds ~0.7s unless a pause is intentionally required.",
-        f"- Aim for up to {MAX_HIGHLIGHTS} standout highlights; keep each roughly 2-4 seconds and anchor every one to a crisp verb-free noun phrase from the transcript.",
+        f"- Aim for up to {MAX_HIGHLIGHTS} standout highlights; keep each roughly 2-4 seconds and provide `text`/`keyword` values that are already final noun phrases (no filler, no conjunction lists) so the backend can render them without extra cleanup.",
         "- Maintain breathing room—skip filler chatter, but don't hesitate to capture each meaningful beat the speaker emphasises.",
         f"- Populate `highlights` with `type` (noteBox/typewriter/sectionTitle/icon/etc.), `text`, `start`, `duration`, plus `position` ({highlight_positions}) and `animation` ({highlight_animations}). Icons may sit centre; all large text callouts stay `position: \"bottom\"`.",
         "- Keep highlight placements to three slots: a bold bottom banner for the key noun phrase, plus optional concise supporting phrases at `supportingTexts.topLeft` and `supportingTexts.topRight`.",
-        "- For textual highlights, keep `text`/`keyword` to a meaningful noun phrase (no verbs, no conjunction lists). Favour compact 2-3 word noun clusters; if you cannot form one, skip the highlight. Always anchor the main phrase at the bottom centre using `layout: \"bottom\"` (or set `layout` to `left`/`right`/`dual` with `supportingTexts.topLeft`/`supportingTexts.topRight` while keeping the bottom text).",
+        "- For textual highlights, the `text` and `keyword` you emit should already be polished noun phrases (no verbs or connectors) of 2-3 words. Always anchor the main phrase at the bottom centre using `layout: \"bottom\"` (or set `layout` to `left`/`right`/`dual` with `supportingTexts.topLeft`/`supportingTexts.topRight` while keeping the bottom text).",
         "- When emitting `sectionTitle` entries, append a high-level descriptor (Overview/Insights/Focus/etc.) so the visible text never duplicates a raw clip name or B-roll label.",
         "- Only surface language that actually appears in the transcript (allowing singular/plural variations); extract noun phrases from the spoken sentence and avoid invented wording.",
         "- If you cannot find a clear noun phrase for a candidate moment, skip the highlight instead of forcing one.",
@@ -1248,6 +989,8 @@ def normalize_highlight_item(
     raw: Dict[str, Any],
     index: int,
     srt_lookup: Dict[int, SrtEntry] | None = None,
+    *,
+    max_duration: float | None = None,
 ) -> Dict[str, Any] | None:
     """
     Normalizes a raw highlight item definition into a structured dictionary.
@@ -1341,6 +1084,18 @@ def normalize_highlight_item(
             duration = srt_duration
             duration = max(1.5, min(duration, 5.0))
     start = max(0.0, start)
+
+    if max_duration and max_duration > 0:
+        if start >= max_duration:
+            return None
+        remaining = max_duration - start
+        if remaining <= 0:
+            return None
+        duration = min(duration, remaining)
+        min_allowed = 1.5 if remaining >= 1.5 else remaining
+        if min_allowed <= 0:
+            return None
+        duration = max(min_allowed, duration)
 
     # Determine highlight positioning defaults
     is_icon_highlight = resolved_highlight_type == "icon"
@@ -1605,6 +1360,448 @@ def normalize_highlight_item(
     return highlight
 
 
+def _clip_event_window(
+    start_seconds: float,
+    duration_seconds: float,
+    limit_seconds: float | None = None,
+) -> tuple[float, float] | None:
+    """
+    Clamps a timeline window to start>=0 and within an optional limit.
+    Returns (start, duration) rounded to milliseconds or None if invalid.
+    """
+    start = max(0.0, ensure_float(start_seconds, 0.0))
+    duration = ensure_float(duration_seconds, 0.0)
+    if duration <= 0:
+        return None
+    if limit_seconds and limit_seconds > 0:
+        if start >= limit_seconds:
+            return None
+        remaining = limit_seconds - start
+        if remaining <= 0:
+            return None
+        duration = min(duration, remaining)
+        if duration <= 0:
+            return None
+    return round(start, 3), round(duration, 3)
+
+
+def _tokenize_phrase(value: str) -> List[str]:
+    if not value:
+        return []
+    return [token for token in re.findall(r"[A-Za-z0-9]+", value.upper()) if token]
+
+
+def _unique_tokens(tokens: List[str], limit: int) -> List[str]:
+    seen: set[str] = set()
+    result: List[str] = []
+    for token in tokens:
+        if token in seen:
+            continue
+        seen.add(token)
+        result.append(token)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _build_keyword_list(tokens: List[str], limit: int = 3) -> List[str]:
+    unique = _unique_tokens(tokens, limit)
+    return [token.title() for token in unique]
+
+
+def _build_node_payload(tokens: List[str], limit: int = 5) -> List[Dict[str, str]]:
+    unique = _unique_tokens(tokens, limit)
+    return [{"label": token.title()} for token in unique]
+
+
+def _build_step_payload(tokens: List[str], limit: int = 4) -> List[Dict[str, str]]:
+    if not tokens:
+        return []
+    steps: List[Dict[str, str]] = []
+    chunk_size = 2 if len(tokens) >= 4 else 1
+    pointer = 0
+    while pointer < len(tokens) and len(steps) < limit:
+        chunk = " ".join(tokens[pointer : pointer + chunk_size]).title()
+        if chunk:
+            steps.append({"title": chunk})
+        pointer += chunk_size
+    return steps
+
+
+def _highlight_corpus(highlight: Dict[str, Any], text_lower: str) -> str:
+    parts: List[str] = [text_lower]
+    for field in ("keyword", "title", "id", "name"):
+        value = highlight.get(field)
+        if isinstance(value, str) and value.strip():
+            parts.append(value.lower())
+    return " ".join(parts)
+
+
+def _looks_like_framework(highlight: Dict[str, Any], text_lower: str) -> bool:
+    corpus = _highlight_corpus(highlight, text_lower)
+    return any(hint in corpus for hint in FRAMEWORK_HINTS)
+
+
+def _looks_like_step_sequence(highlight: Dict[str, Any], text_lower: str) -> bool:
+    corpus = _highlight_corpus(highlight, text_lower)
+    return bool(STEP_ID_PATTERN.search(corpus)) or any(hint in corpus for hint in STEP_HINTS)
+
+
+def _looks_like_list_callout(highlight: Dict[str, Any], text_lower: str) -> bool:
+    corpus = _highlight_corpus(highlight, text_lower)
+    return any(hint in corpus for hint in LIST_HINTS)
+
+
+def _looks_like_vs_phrase(text_lower: str) -> bool:
+    padded = f" {text_lower} "
+    return any(token in padded for token in VS_TOKENS)
+
+
+def _contains_numbers(value: str) -> bool:
+    return bool(NUMBER_PATTERN.search(value or ""))
+
+
+def _has_conflict(
+    occupied: List[tuple[float, float, float]],
+    start: float,
+    end: float,
+    buffer: float,
+) -> bool:
+    for existing_start, existing_end, existing_buffer in occupied:
+        min_gap = max(buffer, existing_buffer)
+        if start < existing_end + min_gap and end > existing_start - min_gap:
+            return True
+    return False
+
+
+def _align_from_position(highlight: Dict[str, Any]) -> str:
+    position = (highlight.get("position") or "").lower()
+    return "center" if position == "center" else "bottom"
+
+
+def _props_for_effect(
+    effect_key: str,
+    text: str,
+    tokens: List[str],
+    highlight: Dict[str, Any],
+    index: int,
+) -> Dict[str, Any]:
+    text_upper = text.upper()
+    align = _align_from_position(highlight)
+    if effect_key == "text.popUp3D":
+        subtitle_raw = sanitize_highlight_text(highlight.get("keyword") or highlight.get("title") or "")
+        props: Dict[str, Any] = {"text": text_upper}
+        if subtitle_raw and subtitle_raw.lower() != text.lower():
+            props["subtitle"] = subtitle_raw.upper()
+        return props
+    if effect_key == "text.keywordSubtitleHighlight":
+        keywords = _build_keyword_list(tokens, limit=2) or [text]
+        return {"text": text, "keywords": keywords, "align": align}
+    if effect_key == "text.keywordColorHighlight":
+        keywords = _build_keyword_list(tokens, limit=3) or [text]
+        return {"text": text, "keywords": keywords, "align": align}
+    if effect_key == "text.sideFloat":
+        side = "left" if index % 2 == 0 else "right"
+        return {"text": text_upper, "side": side}
+    if effect_key == "text.swipeHighlight":
+        return {"text": text_upper}
+    if effect_key == "text.sequentialList":
+        items = [token.title() for token in _unique_tokens(tokens, 5)]
+        return {"items": items or [text_upper]}
+    if effect_key == "text.centralConcept":
+        nodes = _build_node_payload(tokens[1:], limit=5)
+        return {
+            "centralLabel": tokens[0].title() if tokens else text.title(),
+            "nodes": nodes or [{"label": text.title()}],
+        }
+    if effect_key == "text.stepBreakdown":
+        steps = _build_step_payload(tokens, limit=4)
+        topic = highlight.get("keyword") or highlight.get("title") or text
+        return {"topic": sanitize_highlight_text(topic) or text.title(), "steps": steps}
+    if effect_key == "text.typeOn":
+        subtitle = sanitize_highlight_text(highlight.get("keyword") or "")
+        props = {"text": text_upper}
+        if subtitle and subtitle.lower() != text.lower():
+            props["subtitle"] = subtitle.upper()
+        return props
+    return {"text": text_upper}
+
+
+def _resolve_highlight_effect(
+    highlight: Dict[str, Any],
+    index: int,
+) -> tuple[str, Dict[str, Any]] | None:
+    raw_text = (
+        highlight.get("text")
+        or highlight.get("keyword")
+        or highlight.get("title")
+        or highlight.get("name")
+        or highlight.get("id")
+    )
+    sanitized_text = sanitize_highlight_text(raw_text or "")
+    if not sanitized_text:
+        return None
+    tokens = _tokenize_phrase(sanitized_text)
+    text_lower = sanitized_text.lower()
+    highlight_type = (highlight.get("type") or "").lower()
+
+    if highlight_type in {"sectiontitle", "typewriter"}:
+        props = _props_for_effect("text.typeOn", sanitized_text, tokens, highlight, index)
+        return "text.typeOn", props
+
+    if _looks_like_framework(highlight, text_lower) and len(tokens) >= 3:
+        nodes = _build_node_payload(tokens[1:], limit=5)
+        if nodes:
+            props = {
+                "centralLabel": tokens[0].title(),
+                "nodes": nodes,
+            }
+            return "text.centralConcept", props
+
+    if _looks_like_step_sequence(highlight, text_lower) and len(tokens) >= 2:
+        steps = _build_step_payload(tokens, limit=4)
+        if steps:
+            topic = highlight.get("keyword") or sanitized_text
+            props = {"topic": sanitize_highlight_text(topic) or sanitized_text.title(), "steps": steps}
+            return "text.stepBreakdown", props
+
+    if (_looks_like_list_callout(highlight, text_lower) or len(tokens) >= 4) and not _contains_numbers(sanitized_text):
+        items = [token.title() for token in _unique_tokens(tokens, 5)]
+        if len(items) >= 3:
+            return "text.sequentialList", {"items": items}
+
+    if _looks_like_vs_phrase(text_lower):
+        return "text.swipeHighlight", {"text": sanitized_text.upper()}
+
+    if _contains_numbers(sanitized_text):
+        keywords = _build_keyword_list(tokens, limit=3) or [sanitized_text]
+        return "text.keywordColorHighlight", {"text": sanitized_text, "keywords": keywords, "align": _align_from_position(highlight)}
+
+    if highlight.get("importance", "primary") != "primary":
+        return "text.sideFloat", {"text": sanitized_text.upper(), "side": "left" if index % 2 == 0 else "right"}
+
+    fallback_key = NOTEBOX_EFFECT_ROTATION[index % len(NOTEBOX_EFFECT_ROTATION)]
+    props = _props_for_effect(fallback_key, sanitized_text, tokens, highlight, index)
+    return fallback_key, props
+
+
+def generate_highlight_effects(
+    highlights: Iterable[Dict[str, Any]] | None,
+    *,
+    canonical_duration: float | None = None,
+) -> List[Dict[str, Any]]:
+    if not highlights:
+        return []
+
+    entries: List[Dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    occupied_ranges: List[tuple[float, float, float]] = []
+    bucket_counts: defaultdict[int, int] = defaultdict(int)
+    for index, highlight in enumerate(highlights):
+        if not isinstance(highlight, dict):
+            continue
+        start = ensure_float(highlight.get("start"), 0.0)
+        duration = ensure_float(highlight.get("duration"), DEFAULT_HIGHLIGHT_DURATION)
+        if duration <= 0:
+            duration = DEFAULT_HIGHLIGHT_DURATION
+
+        effect_resolution = _resolve_highlight_effect(highlight, index)
+        if not effect_resolution:
+            continue
+        effect_key, props = effect_resolution
+        if effect_key not in ALLOWED_TEXT_EFFECT_KEYS:
+            continue
+
+        clipped = _clip_event_window(start, duration, canonical_duration)
+        if not clipped:
+            continue
+        clipped_start, clipped_duration = clipped
+        clipped_duration = max(MIN_TEXT_EFFECT_DURATION, min(clipped_duration, MAX_TEXT_EFFECT_DURATION))
+        clipped_end = clipped_start + clipped_duration
+
+        buffer = TYPEON_PROTECT_GAP if effect_key == "text.typeOn" else GENERAL_EFFECT_GAP
+        if _has_conflict(occupied_ranges, clipped_start, clipped_end, buffer):
+            continue
+
+        bucket_index = int(clipped_start // EFFECT_BUCKET_SECONDS)
+        if bucket_counts[bucket_index] >= MAX_EFFECTS_PER_BUCKET:
+            continue
+
+        entry_id = f"textfx-{highlight.get('id', index + 1)}"
+        base_id = entry_id
+        suffix = 2
+        while entry_id in seen_ids:
+            entry_id = f"{base_id}-{suffix}"
+            suffix += 1
+        seen_ids.add(entry_id)
+
+        entry: Dict[str, Any] = {
+            "id": entry_id,
+            "start": round(clipped_start, 3),
+            "duration": round(clipped_duration, 3),
+            "effectKey": effect_key,
+            "layer": "overlay",
+        }
+        if props:
+            entry["props"] = props
+        entries.append(entry)
+        occupied_ranges.append((clipped_start, clipped_end, buffer))
+        bucket_counts[bucket_index] += 1
+
+    entries.sort(key=lambda item: item.get("start", 0.0))
+    return entries
+
+
+def normalize_effect_track_entries(
+    entries: Any,
+    *,
+    canonical_duration: float | None = None,
+) -> List[Dict[str, Any]]:
+    """
+    Normalizes raw effect track entries into sanitized dictionaries.
+    """
+    normalized: List[Dict[str, Any]] = []
+    if not isinstance(entries, list):
+        return normalized
+
+    seen_ids: set[str] = set()
+    for idx, raw in enumerate(entries):
+        if not isinstance(raw, dict):
+            continue
+        effect_key = (
+            raw.get("effectKey")
+            or raw.get("effect_key")
+            or raw.get("effect")
+            or raw.get("key")
+        )
+        if not isinstance(effect_key, str) or not effect_key.strip():
+            continue
+        start = ensure_float(raw.get("start"), 0.0)
+        duration = ensure_float(raw.get("duration"), 0.0)
+        if duration <= 0:
+            end_value = ensure_float(raw.get("end"))
+            if end_value > start:
+                duration = end_value - start
+        if duration <= 0:
+            duration = DEFAULT_HIGHLIGHT_DURATION
+
+        clipped = _clip_event_window(start, duration, canonical_duration)
+        if not clipped:
+            continue
+        start, duration = clipped
+
+        entry_id = raw.get("id")
+        entry_id = str(entry_id) if entry_id else f"effect-{idx + 1:03d}"
+        while entry_id in seen_ids:
+            entry_id = f"{entry_id}-{len(seen_ids) + 1}"
+        seen_ids.add(entry_id)
+
+        entry: Dict[str, Any] = {
+            "id": entry_id,
+            "start": start,
+            "duration": duration,
+            "effectKey": effect_key.strip(),
+        }
+        layer = raw.get("layer")
+        if isinstance(layer, str) and layer.strip():
+            entry["layer"] = layer.strip()
+        props = raw.get("props")
+        if isinstance(props, dict) and props:
+            entry["props"] = props
+        normalized.append(entry)
+
+    return normalized
+
+
+def normalize_sfx_track_entries(
+    entries: Any,
+    *,
+    canonical_duration: float | None = None,
+) -> List[Dict[str, Any]]:
+    """
+    Normalizes raw SFX track entries, mapping names via SFX lookup when possible.
+    """
+    normalized: List[Dict[str, Any]] = []
+    if not isinstance(entries, list):
+        return normalized
+
+    seen_ids: set[str] = set()
+    for idx, raw in enumerate(entries):
+        if not isinstance(raw, dict):
+            continue
+        src_value = raw.get("src") or raw.get("file") or raw.get("sound")
+        normalized_src = normalize_sfx_name(src_value) if src_value else None
+        if not normalized_src and isinstance(src_value, str):
+            normalized_src = src_value.strip()
+        if not normalized_src:
+            continue
+
+        start = ensure_float(raw.get("start"), 0.0)
+        duration = ensure_float(raw.get("duration"), DEFAULT_HIGHLIGHT_DURATION)
+        if duration <= 0:
+            end_value = ensure_float(raw.get("end"))
+            if end_value > start:
+                duration = end_value - start
+        if duration <= 0:
+            duration = DEFAULT_HIGHLIGHT_DURATION
+
+        clipped = _clip_event_window(start, duration, canonical_duration)
+        if not clipped:
+            continue
+        start, duration = clipped
+
+        entry_id = raw.get("id")
+        entry_id = str(entry_id) if entry_id else f"sfx-{idx + 1:03d}"
+        while entry_id in seen_ids:
+            entry_id = f"{entry_id}-{len(seen_ids) + 1}"
+        seen_ids.add(entry_id)
+
+        entry: Dict[str, Any] = {
+            "id": entry_id,
+            "start": start,
+            "duration": duration,
+            "src": normalized_src,
+        }
+        volume = raw.get("volume")
+        try:
+            if volume is not None:
+                entry["volume"] = max(0.0, min(float(volume), 1.0))
+        except (TypeError, ValueError):
+            pass
+        normalized.append(entry)
+
+    return normalized
+
+
+def _infer_canonical_duration(
+    plan: Dict[str, Any],
+    srt_entries: Iterable[SrtEntry] | None,
+) -> float:
+    """
+    Determines the canonical duration (seconds) for the processed video timeline.
+    Prefers SRT-derived timing and falls back to plan.meta.duration.
+    """
+    srt_duration = 0.0
+    if srt_entries:
+        for entry in srt_entries:
+            if not isinstance(entry, SrtEntry):
+                continue
+            try:
+                end_seconds = seconds_from_timecode(entry.end)
+            except Exception:  # pragma: no cover - defensive
+                continue
+            if end_seconds > srt_duration:
+                srt_duration = end_seconds
+
+    meta_duration = 0.0
+    meta = plan.get("meta")
+    if isinstance(meta, dict):
+        meta_duration = ensure_float(meta.get("duration"))
+
+    canonical = srt_duration if srt_duration > 0 else meta_duration
+    return round(canonical, 3) if canonical > 0 else 0.0
+
+
 def normalize_plan(
     plan: Dict[str, Any],
     *,
@@ -1627,13 +1824,16 @@ def normalize_plan(
     if not isinstance(plan, dict):
         raise ValueError("Plan must be a JSON object.")
 
+    srt_list = list(srt_entries) if srt_entries else []
     srt_lookup: Dict[int, SrtEntry] = {}
-    if srt_entries:
+    if srt_list:
         srt_lookup = {
             entry.index: entry
-            for entry in srt_entries
+            for entry in srt_list
             if isinstance(entry, SrtEntry)
         }
+    canonical_duration = _infer_canonical_duration(plan, srt_list)
+    max_segment_end = 0.0
 
     segment_items: List[tuple[float, Dict[str, Any]]] = []
     raw_segments = plan.get("segments")
@@ -1660,10 +1860,23 @@ def normalize_plan(
             if duration <= 0:
                 continue
 
+            if canonical_duration > 0:
+                if source_start >= canonical_duration:
+                    continue
+                max_allowed = canonical_duration - source_start
+                if max_allowed <= 0:
+                    continue
+                if duration > max_allowed:
+                    duration = max_allowed
+
+            duration = round(duration, 3)
+            if duration <= 0:
+                continue
+
             segment_plan: Dict[str, Any] = {
                 "id": str(raw_segment.get("id") or f"segment-{index + 1:02d}"),
                 "sourceStart": round(source_start, 3),
-                "duration": round(duration, 3),
+                "duration": duration,
             }
 
             # Tạm thời vô hiệu hóa gắn nhãn segment `broll` để tránh chèn placeholder B-roll.
@@ -1752,6 +1965,7 @@ def normalize_plan(
                 source_start,
             )
             segment_items.append((timeline_start, segment_plan))
+            max_segment_end = max(max_segment_end, source_start + duration)
 
     # Sort segments by timeline start and source start
     segment_items.sort(key=lambda item: (item[0], item[1]["sourceStart"]))
@@ -1771,7 +1985,12 @@ def normalize_plan(
 
     normalized_highlights: List[Dict[str, Any]] = []
     for idx, raw_highlight in enumerate(raw_highlights):
-        normalized = normalize_highlight_item(raw_highlight, idx, srt_lookup=srt_lookup)
+        normalized = normalize_highlight_item(
+            raw_highlight,
+            idx,
+            srt_lookup=srt_lookup,
+            max_duration=canonical_duration if canonical_duration > 0 else None,
+        )
         if normalized:
             normalized_highlights.append(normalized)
         if len(normalized_highlights) >= MAX_HIGHLIGHTS:
@@ -1780,14 +1999,63 @@ def normalize_plan(
     # Sort highlights by start time
     normalized_highlights.sort(key=lambda item: item.get("start", 0.0))
 
+    if canonical_duration <= 0 and max_segment_end > 0:
+        canonical_duration = round(max_segment_end, 3)
+
+    normalized_tracks: Dict[str, Any] = {}
+    raw_tracks = plan.get("tracks")
+    if isinstance(raw_tracks, dict):
+        raw_effects = raw_tracks.get("effects")
+        normalized_effects = normalize_effect_track_entries(
+            raw_effects,
+            canonical_duration=canonical_duration if canonical_duration > 0 else None,
+        )
+        if normalized_effects:
+            normalized_tracks["effects"] = normalized_effects
+        raw_sfx = raw_tracks.get("sfx")
+        normalized_sfx = normalize_sfx_track_entries(
+            raw_sfx,
+            canonical_duration=canonical_duration if canonical_duration > 0 else None,
+        )
+        if normalized_sfx:
+            normalized_tracks["sfx"] = normalized_sfx
+
+    highlight_effects = generate_highlight_effects(
+        normalized_highlights,
+        canonical_duration=canonical_duration if canonical_duration > 0 else None,
+    )
+    if highlight_effects:
+        existing_effects = normalized_tracks.get("effects", [])
+        existing_ids = {
+            str(entry.get("id"))
+            for entry in existing_effects
+            if isinstance(entry, dict) and entry.get("id")
+        }
+        for entry in highlight_effects:
+            base_id = entry["id"]
+            candidate = base_id
+            suffix = 2
+            while candidate in existing_ids:
+                candidate = f"{base_id}-{suffix}"
+                suffix += 1
+            entry["id"] = candidate
+            existing_ids.add(candidate)
+            existing_effects.append(entry)
+        normalized_tracks["effects"] = existing_effects
+
     normalized_plan: Dict[str, Any] = {
         "segments": normalized_segments,
         "highlights": normalized_highlights,
     }
+    if normalized_tracks:
+        normalized_plan["tracks"] = normalized_tracks
 
-    # Add meta information if present
-    if "meta" in plan:
-        normalized_plan["meta"] = plan["meta"]
+    raw_meta = plan.get("meta")
+    if isinstance(raw_meta, dict):
+        normalized_plan["meta"] = dict(raw_meta)
+    if canonical_duration > 0:
+        normalized_plan.setdefault("meta", {})
+        normalized_plan["meta"]["duration"] = round(canonical_duration, 3)
 
     return normalized_plan
 
@@ -1920,7 +2188,7 @@ def main(argv: List[str] | None = None) -> int:
     motion_rules = load_json_if_exists(repo_root / "assets" / "motion_rules.json") or None
 
     # Initialize KnowledgeService
-    knowledge_service: Optional[KnowledgeService] = None
+    knowledge_service: Optional[KnowledgeService] = None  # type: ignore[name-defined]
     if KnowledgeService is not None:
         try:
             knowledge_service = KnowledgeService()
